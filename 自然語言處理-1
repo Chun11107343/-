@@ -1,0 +1,76 @@
+#安裝必要模組
+!pip install SpeechRecognition pydub googletrans==4.0.0-rc1 ipywidgets
+!apt-get install ffmpeg
+#匯入模組
+import ipywidgets as widgets
+from IPython.display import display
+import speech_recognition as sr
+from pydub import AudioSegment
+from googletrans import Translator
+import io
+
+def transcribe_audio(file_data, chunk_length_ms=60000):
+    recognizer = sr.Recognizer()
+    audio = AudioSegment.from_file(io.BytesIO(file_data), format="mp3")
+
+    # 將音頻文件轉換為 .wav 格式
+    audio.export("converted_audio.wav", format="wav")
+    
+    audio = AudioSegment.from_wav("converted_audio.wav")
+    total_duration_ms = len(audio)
+    
+    transcript = ""
+    for i in range(0, total_duration_ms, chunk_length_ms):
+        chunk = audio[i:i + chunk_length_ms]
+        chunk.export("chunk.wav", format="wav")
+        with sr.AudioFile("chunk.wav") as source:
+            audio_data = recognizer.record(source)
+            try:
+                text = recognizer.recognize_google(audio_data, language="zh-TW")
+                transcript += text + " "
+            except sr.UnknownValueError:
+                print("Google Speech Recognition 無法理解音頻")
+            except sr.RequestError as e:
+                print("無法請求結果; {0}".format(e))
+                break
+    
+    return transcript
+
+def upload_file(change):
+    global trans_text
+    # 取得上傳的文件
+    for file_name in change['new']:
+        file_data = upload_button.value[file_name]['content']
+        transcript = transcribe_audio(file_data)
+        transcript_label.value = "轉換後的文字: " + transcript
+        trans_text = transcript
+
+def translate_text(b):
+    translator = Translator()
+    selected_lang = lang_dropdown.value
+    translated = translator.translate(trans_text, src='zh-tw', dest=selected_lang)
+    translated_label.value = "Translated text: " + translated.text
+
+# 創建上傳按鈕
+upload_button = widgets.FileUpload(description="上傳音頻文件")
+upload_button.observe(upload_file, names='value')
+
+# 轉錄結果標籤
+transcript_label = widgets.Label(value="轉錄的文本將顯示在此處")
+
+# 選擇語言下拉菜單
+lang_dropdown = widgets.Dropdown(
+    options=[('英語', 'en'), ('日語', 'ja'), ('韓語', 'ko'), ('法語', 'fr'), ('德語', 'de')],
+    value='en',
+    description='翻譯語言:'
+)
+
+# 翻譯按鈕
+translate_button = widgets.Button(description="翻譯文本")
+translate_button.on_click(translate_text)
+
+# 翻譯結果標籤
+translated_label = widgets.Label(value="翻譯的文本將顯示在此處")
+
+# 顯示所有小部件
+display(upload_button, transcript_label, lang_dropdown, translate_button, translated_label)
